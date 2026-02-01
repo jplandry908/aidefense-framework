@@ -10,7 +10,7 @@ export const isolateTactic = {
                 {
                     "framework": "MITRE ATLAS",
                     "items": [
-                        "AML.T0053: LLM Plugin Compromise",
+                        "AML.T0053: AI Agent Tool Invocation",
                         "AML.T0020: Poison Training Data",
                         "AML.T0072: Reverse Shell",
                         "AML.T0050 Command and Scripting Interpreter",
@@ -67,7 +67,7 @@ export const isolateTactic = {
                         {
                             "framework": "MITRE ATLAS",
                             "items": [
-                                "AML.T0053 LLM Plugin Compromise",
+                                "AML.T0053 AI Agent Tool Invocation",
                                 "AML.T0072 Reverse Shell",
                                 "AML.T0029 Denial of AI Service",
                                 "AML.T0034 Cost Harvesting"
@@ -151,7 +151,7 @@ export const isolateTactic = {
                         {
                             "framework": "MITRE ATLAS",
                             "items": [
-                                "AML.T0053 LLM Plugin Compromise",
+                                "AML.T0053 AI Agent Tool Invocation",
                                 "AML.T0072 Reverse Shell",
                                 "AML.T0017 Persistence",
                                 "AML.T0029 Denial of AI Service",

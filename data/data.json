@@ -2711,7 +2711,7 @@
                 "AML.T0036 Data from Information Repositories",
                 "AML.T0037 Data from Local System",
                 "AML.T0044 Full AI Model Access",
-                "AML.T0053 LLM Plugin Compromise",
+                "AML.T0053 AI Agent Tool Invocation",
                 "AML.T0073 Impersonation",
                 "AML.T0055 Unsecured Credentials"
               ]
@@ -2898,7 +2898,7 @@
                   "items": [
                     "AML.T0073 Impersonation",
                     "AML.T0055 Unsecured Credentials",
-                    "AML.T0053 LLM Plugin Compromise"
+                    "AML.T0053 AI Agent Tool Invocation"
                   ]
                 },
                 {
@@ -3351,7 +3351,7 @@
               "framework": "MITRE ATLAS",
               "items": [
                 "AML.T0077 LLM Response Rendering",
-                "AML.T0053 LLM Plugin Compromise",
+                "AML.T0053 AI Agent Tool Invocation",
                 "AML.T0050 Command and Scripting Interpreter (via generated code)",
                 "AML.T0048 External Harms (by cleaning malicious payloads)",
                 "AML.T0052 Phishing (by sanitizing malicious links)",
@@ -3427,7 +3427,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053: LLM Plugin Compromise",
+                    "AML.T0053: AI Agent Tool Invocation",
                     "AML.T0050: Command and Scripting Interpreter"
                   ]
                 },
@@ -6074,7 +6074,7 @@
             {
               "framework": "MITRE ATLAS",
               "items": [
-                "AML.T0053 LLM Plugin Compromise"
+                "AML.T0053 AI Agent Tool Invocation"
               ]
             },
             {
@@ -6126,7 +6126,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053 LLM Plugin Compromise"
+                    "AML.T0053 AI Agent Tool Invocation"
                   ]
                 },
                 {
@@ -6189,7 +6189,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053 LLM Plugin Compromise",
+                    "AML.T0053 AI Agent Tool Invocation",
                     "AML.T0012 Valid Accounts"
                   ]
                 },
@@ -6250,7 +6250,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053 LLM Plugin Compromise"
+                    "AML.T0053 AI Agent Tool Invocation"
                   ]
                 },
                 {
@@ -7756,7 +7756,7 @@
                 "AML.T0052: Phishing",
                 "AML.T0047: AI-Enabled Product or Service",
                 "AML.T0061: LLM Prompt Self-Replication",
-                "AML.T0053: LLM Plugin Compromise",
+                "AML.T0053: AI Agent Tool Invocation",
                 "AML.T0067: LLM Trusted Output Components Manipulation",
                 "AML.T0077: LLM Response Rendering"
               ]
@@ -7973,7 +7973,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053: LLM Plugin Compromise",
+                    "AML.T0053: AI Agent Tool Invocation",
                     "AML.T0048: External Harms",
                     "AML.TA0005: Execution"
                   ]
@@ -8039,7 +8039,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053: LLM Plugin Compromise",
+                    "AML.T0053: AI Agent Tool Invocation",
                     "AML.TA0005: Execution"
                   ]
                 },
@@ -8987,7 +8987,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053 (LLM Plugin Compromise)",
+                    "AML.T0053 (AI Agent Tool Invocation)",
                     "AML.T0061 (LLM Prompt Self-Replication)"
                   ]
                 },
@@ -10760,7 +10760,7 @@
             {
               "framework": "MITRE ATLAS",
               "items": [
-                "AML.T0053: LLM Plugin Compromise",
+                "AML.T0053: AI Agent Tool Invocation",
                 "AML.T0020: Poison Training Data",
                 "AML.T0072: Reverse Shell",
                 "AML.T0050 Command and Scripting Interpreter",
@@ -10829,7 +10829,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053 LLM Plugin Compromise",
+                    "AML.T0053 AI Agent Tool Invocation",
                     "AML.T0072 Reverse Shell",
                     "AML.T0029 Denial of AI Service",
                     "AML.T0034 Cost Harvesting"
@@ -10912,7 +10912,7 @@
                 {
                   "framework": "MITRE ATLAS",
                   "items": [
-                    "AML.T0053 LLM Plugin Compromise",
+                    "AML.T0053 AI Agent Tool Invocation",
                     "AML.T0072 Reverse Shell",
                     "AML.T0017 Persistence",
                     "AML.T0029 Denial of AI Service",

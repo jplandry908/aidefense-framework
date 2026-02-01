@@ -398,7 +398,7 @@ export const detectTactic = {
                         "AML.T0052: Phishing",
                         "AML.T0047: AI-Enabled Product or Service",
                         "AML.T0061: LLM Prompt Self-Replication",
-                        "AML.T0053: LLM Plugin Compromise",
+                        "AML.T0053: AI Agent Tool Invocation",
                         "AML.T0067: LLM Trusted Output Components Manipulation",
                         "AML.T0077: LLM Response Rendering"
                     ]
@@ -593,7 +593,7 @@ export const detectTactic = {
                         {
                             "framework": "MITRE ATLAS",
                             "items": [
-                                "AML.T0053: LLM Plugin Compromise",
+                                "AML.T0053: AI Agent Tool Invocation",
                                 "AML.T0048: External Harms",
                                 "AML.TA0005: Execution"
                             ]
@@ -657,7 +657,7 @@ export const detectTactic = {
                         {
                             "framework": "MITRE ATLAS",
                             "items": [
-                                "AML.T0053: LLM Plugin Compromise",
+                                "AML.T0053: AI Agent Tool Invocation",
                                 "AML.TA0005: Execution"
                             ]
                         },
@@ -1473,7 +1473,7 @@ export const detectTactic = {
                         {
                             "framework": "MITRE ATLAS",
                             "items": [
-                                "AML.T0053 (LLM Plugin Compromise)",
+                                "AML.T0053 (AI Agent Tool Invocation)",
                                 "AML.T0061 (LLM Prompt Self-Replication)"
                             ]
                         },

@@ -947,7 +947,7 @@ export const hardenTactic = {
             "AML.T0036 Data from Information Repositories",
             "AML.T0037 Data from Local System",
             "AML.T0044 Full AI Model Access",
-            "AML.T0053 LLM Plugin Compromise",
+            "AML.T0053 AI Agent Tool Invocation",
             "AML.T0073 Impersonation",
             "AML.T0055 Unsecured Credentials",
           ],
@@ -1129,7 +1129,6 @@ export const hardenTactic = {
               items: [
                 "AML.T0073 Impersonation",
                 "AML.T0055 Unsecured Credentials",
-                "AML.T0053 LLM Plugin Compromise",
               ],
             },
             {
@@ -1562,7 +1561,6 @@ export const hardenTactic = {
           framework: "MITRE ATLAS",
           items: [
             "AML.T0077 LLM Response Rendering",
-            "AML.T0053 LLM Plugin Compromise",
             "AML.T0050 Command and Scripting Interpreter (via generated code)",
             "AML.T0048 External Harms (by cleaning malicious payloads)",
             "AML.T0052 Phishing (by sanitizing malicious links)",
@@ -1631,7 +1629,7 @@ export const hardenTactic = {
             {
               framework: "MITRE ATLAS",
               items: [
-                "AML.T0053: LLM Plugin Compromise",
+                "AML.T0053: AI Agent Tool Invocation",
                 "AML.T0050: Command and Scripting Interpreter",
               ],
             },
@@ -4270,7 +4268,7 @@ class GraphRobustnessVerifier:
       defendsAgainst: [
         {
           framework: "MITRE ATLAS",
-          items: ["AML.T0053 LLM Plugin Compromise"],
+          items: ["AML.T0053 AI Agent Tool Invocation"],
         },
         {
           framework: "MAESTRO",
@@ -4299,7 +4297,7 @@ class GraphRobustnessVerifier:
           defendsAgainst: [
             {
               framework: "MITRE ATLAS",
-              items: ["AML.T0053 LLM Plugin Compromise"],
+              items: ["AML.T0053 AI Agent Tool Invocation"],
             },
             {
               framework: "MAESTRO",
@@ -4352,7 +4350,7 @@ class GraphRobustnessVerifier:
             {
               framework: "MITRE ATLAS",
               items: [
-                "AML.T0053 LLM Plugin Compromise",
+                "AML.T0053 AI Agent Tool Invocation",
                 "AML.T0012 Valid Accounts",
               ],
             },
@@ -4401,7 +4399,7 @@ class GraphRobustnessVerifier:
           defendsAgainst: [
             {
               framework: "MITRE ATLAS",
-              items: ["AML.T0053 LLM Plugin Compromise"],
+              items: ["AML.T0053 AI Agent Tool Invocation"],
             },
             {
               framework: "MAESTRO",
