@@ -4538,6 +4538,93 @@ class GraphRobustnessVerifier:
               "howTo": "<h5>Concept</h5><p>Application-layer checks can fail due to bugs, alternative code paths, or compromised runtimes. High-assurance environments require an <strong>infrastructure-layer</strong> control that restricts where agent workloads can send traffic, regardless of what the LLM decides.</p><h5>Goals</h5><ul><li><strong>Default-deny</strong> outbound from agent workloads.</li><li><strong>Force all egress through a choke point</strong> (egress gateway / firewall / proxy) for allowlisting + logging.</li><li><strong>Block bypass paths</strong> (direct IP egress, raw SMTP, arbitrary DNS).</li><li><strong>Change-managed allowlists</strong> (GitOps / ticketed approvals), versioned and auditable.</li></ul><h5>Step-by-step</h5><ol><li><strong>Segment workloads</strong>: run agents in dedicated namespaces/workloads by risk (e.g., <code>agent-readonly</code>, <code>agent-highrisk</code>). Attach distinct egress policies.</li><li><strong>Enforce baseline default-deny</strong> with Kubernetes NetworkPolicy (or CiliumNetworkPolicy) so agent pods cannot talk to the Internet directly.</li><li><strong>Force egress via a gateway</strong>: allow only traffic to an Istio/Envoy egress gateway (or an enterprise firewall/proxy). Block all other external destinations.</li><li><strong>Allowlist destinations centrally</strong>: create explicit allowlists for required external SaaS endpoints using ServiceEntry (Istio) or firewall policy objects. Prefer allowlisting by domain + SNI where possible and pin to known IP ranges when feasible.</li><li><strong>Use an internal proxy pattern</strong>: tools should call an internal proxy service (\"tool proxy\") that validates destination + request schema. The proxy then makes outbound calls via the egress gateway.</li><li><strong>Logging + detection</strong>: export egress gateway logs (SNI/host/path/status) to SIEM and correlate with tool-call logs (same <code>request_id</code>/<code>trace_id</code>).</li></ol><h5>Kubernetes NetworkPolicy (default-deny + allow only egress gateway)</h5><pre><code class=\"language-yaml\">apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: agent-egress-default-deny\n  namespace: agent\nspec:\n  podSelector: {}\n  policyTypes:\n  - Egress\n  egress:\n  # Allow DNS only to cluster DNS (adjust to your DNS setup)\n  - to:\n    - namespaceSelector:\n        matchLabels:\n          kubernetes.io/metadata.name: kube-system\n      podSelector:\n        matchLabels:\n          k8s-app: kube-dns\n    ports:\n    - protocol: UDP\n      port: 53\n    - protocol: TCP\n      port: 53\n  # Allow egress only to Istio egress gateway (or your proxy/firewall)\n  - to:\n    - namespaceSelector:\n        matchLabels:\n          kubernetes.io/metadata.name: istio-system\n      podSelector:\n        matchLabels:\n          istio: egressgateway\n    ports:\n    - protocol: TCP\n      port: 443\n</code></pre><h5>Istio: allowlisted external hosts via ServiceEntry + route through EgressGateway</h5><pre><code class=\"language-yaml\">apiVersion: networking.istio.io/v1beta1\nkind: ServiceEntry\nmetadata:\n  name: allow-approved-saas\n  namespace: agent\nspec:\n  hosts:\n  - api.approved-saas.com\n  - webhook.approved-saas.com\n  location: MESH_EXTERNAL\n  ports:\n  - number: 443\n    name: tls\n    protocol: TLS\n  resolution: DNS\n---\napiVersion: networking.istio.io/v1beta1\nkind: VirtualService\nmetadata:\n  name: route-egress-approved-saas\n  namespace: agent\nspec:\n  hosts:\n  - api.approved-saas.com\n  - webhook.approved-saas.com\n  gateways:\n  - mesh\n  - istio-system/istio-egressgateway\n  tls:\n  - match:\n    - gateways: [\"mesh\"]\n      sniHosts: [\"api.approved-saas.com\", \"webhook.approved-saas.com\"]\n    route:\n    - destination:\n        host: istio-egressgateway.istio-system.svc.cluster.local\n        port:\n          number: 443\n</code></pre><h5>Practical hardening tips</h5><ul><li><strong>Block raw SMTP</strong> from agent runtimes. Require a controlled email service that enforces approval gates, DLP checks, and audit logs.</li><li><strong>Prevent DNS bypass</strong>: consider DNS policy/allowlists and restrict egress by both domain and IP ranges. In high-assurance environments, disallow direct IP egress entirely.</li><li><strong>Use workload identity</strong>: bind egress permissions to workload identity (service account, SPIFFE/SPIRE) so only approved runtimes can reach the gateway.</li><li><strong>Centralize allowlist changes</strong>: manage allowlists via GitOps (pull requests + approvals) and tag with <code>policy_version</code> to align with app-layer logs.</li></ul><h5>What this does NOT replace</h5><p>Network-layer controls cannot determine whether the <em>content</em> contains secrets. They must be paired with Strategy 1 (value tagging + sink checks) to prevent exfiltration via allowed destinations (e.g., approved SaaS webhooks).</p>"
             }
           ]
+        },
+        {
+          id: "AID-H-019.006",
+          name: "Continuous Authorization Verification (Anti-TOCTOU)",
+          pillar: ["app"],
+          phase: ["operation"],
+          description:
+            "Prevent Time-of-Check to Time-of-Use (TOCTOU) failures in agentic workflows by re-verifying authorization at execution time for each sensitive step (not only at workflow start). Bind authorization decisions to an immutable execution context (session/task/plan + delegation chain) and invalidate stale decisions on context change.",
+          toolsOpenSource: [
+            "Open Policy Agent (OPA)",
+            "OpenFGA (relationship-based access control)",
+            "Cedar (policy language, open source)",
+            "Casbin (authorization library)",
+            "Keycloak (IdP / session management)",
+          ],
+          toolsCommercial: [
+            "Styra DAS (OPA platform)",
+            "Okta (IdP + policy integration)",
+            "Auth0 (IdP + policy integration)",
+            "Aserto (authorization platform)",
+          ],
+          defendsAgainst: [
+            { framework: "MITRE ATLAS", items: ["AML.T0053: LLM Plugin Compromise"] },
+            { framework: "MAESTRO", items: ["Agent Tool Misuse (L7)", "Privilege Escalation (L6)"] },
+            { framework: "OWASP Agentic Top 10 2026", items: ["ASI03: Identity and Privilege Abuse"] },
+          ],
+          implementationStrategies: [
+            {
+              strategy:
+                "Execution-time (JIT) authorization: re-check policy immediately before high-impact tool calls using a central policy engine (PDP).",
+              howTo: `<h5>Step-by-step</h5>
+<ol>
+  <li>Identify <b>high-impact</b> actions (payments, deletes, privilege changes, outbound sends, bulk exports).</li>
+  <li>Before executing each high-impact action, call the PDP for a fresh decision.</li>
+  <li>Bind the decision to the execution context (session/task/plan hash).</li>
+  <li>Fail closed and alert on deny or context mismatch.</li>
+</ol>
+
+<h5>Example code (Python) — simplified JIT auth check</h5>
+<pre><code>import time
+import requests
+
+class PermissionDenied(Exception):
+    pass
+
+def jit_authorize(pdp_url: str, input_doc: dict) -&gt; None:
+    # NOTE:
+    # - This example uses HTTP to call a PDP (e.g., OPA).
+    # - Use short timeouts. Consider retries and mTLS in real deployments.
+    resp = requests.post(pdp_url, json={"input": input_doc}, timeout=2.0)
+    resp.raise_for_status()
+    result = resp.json().get("result", {})
+    if not result.get("allow", False):
+        raise PermissionDenied("JIT authorization denied")
+
+def execute_tool_with_jit_auth(pdp_url: str, ctx: dict, tool_name: str, tool_params: dict):
+    # NOTE:
+    # - Avoid sending raw secrets into policy logs; hash sensitive fields if needed.
+    input_doc = {
+        "session_id": ctx["session_id"],
+        "task_id": ctx["task_id"],
+        "plan_hash": ctx["plan_hash"],
+        "actor_id": ctx["actor_id"],
+        "tool": tool_name,
+        "risk": "high",
+        "now": time.time(),
+    }
+
+    # Re-check authorization immediately before execution (TOCTOU prevention)
+    jit_authorize(pdp_url, input_doc)
+
+    # Placeholder: replace with your actual tool invocation
+    return {"status": "executed", "tool": tool_name}</code></pre>`,
+            },
+            {
+              strategy:
+                "Short TTL + resume re-check: decisions must expire quickly and must be re-verified on workflow resume or context switch.",
+              howTo: `<h5>What to enforce</h5>
+<ul>
+  <li><b>Short TTL</b>: high-risk authorization decisions should expire quickly (e.g., 30–120 seconds).</li>
+  <li><b>Resume = context switch</b>: if a workflow pauses/resumes, always re-check before executing sensitive steps.</li>
+  <li><b>Delegation chain binding</b>: if multiple agents delegate work, re-validate the chain at each hop for high-impact actions.</li>
+</ul>
+
+<p><b>Common TOCTOU bug:</b> approving once at workflow start and reusing that approval for later steps. Enforce re-checks at the tool gateway to make this reliable.</p>`,
+            },
+          ],
         }
       ],
     },
@@ -5186,6 +5273,435 @@ class GraphRobustnessVerifier:
             "Implement consumer-side policies to enforce publisher integrity.",
           howTo:
             "<h5>Concept:</h5><p>Create a final line of defense by configuring your internal systems to reject packages that do not meet your new, stricter security standards. This enforces the policy on the consumption side, protecting developers even if a malicious package bypasses publishing controls.</p><p><strong>Action:</strong> Configure your internal package registry (e.g., Artifactory) or build tools to reject any new package versions that are not accompanied by a valid, verifiable provenance attestation. Additionally, use the registry's policies to block the installation of any package that contains a `postinstall` script, unless that specific package has been explicitly allow-listed after a manual security review. This policy SHOULD validate that the provenance/attestation (e.g. Sigstore/SLSA-style attestations emitted from the trusted CI pipeline) matches an approved publisher identity and workflow.</p>",
+        },
+      ],
+    },
+    {
+      id: "AID-H-025",
+      name: "Tool & MCP Resolution Integrity",
+      description:
+        "Enforce deterministic, verified resolution of tools and Model Context Protocol (MCP) endpoints to prevent typosquatting, alias collision, and registry-based misdirection. Resolution must be fail-closed: ambiguous matches require explicit disambiguation rather than best-guess selection. This ensures that when an agent calls a tool, it binds to the exact, authorized namespace, version, and descriptor bytes intended.",
+      pillar: ["infra", "app"],
+      phase: ["operation"],
+      defendsAgainst: [
+        {
+          framework: "MITRE ATLAS",
+          items: [
+            "AML.T0010.001: AI Supply Chain Compromise: AI Software",
+            "AML.T0074: Masquerading",
+            "AML.T0073: Impersonation",
+          ],
+        },
+        {
+          framework: "MAESTRO",
+          items: [
+            "Compromised Agent Registry (L7)",
+            "Agent Masquerading (L7)",
+            "Supply Chain Attacks (Cross-Layer)",
+          ],
+        },
+        {
+          framework: "OWASP LLM Top 10 2025",
+          items: ["LLM03:2025 Supply Chain", "LLM06:2025 Excessive Agency"],
+        },
+        {
+          framework: "OWASP Agentic Top 10 2026",
+          items: [
+            "ASI02: Tool Misuse and Exploitation",
+            "ASI04: Agentic Supply Chain Vulnerabilities",
+          ],
+        },
+      ],
+      subTechniques: [
+        {
+          id: "AID-H-025.001",
+          name: "Fully Qualified Tool ID & Version Pinning",
+          pillar: ["app"],
+          phase: ["operation"],
+          description:
+            "Require fully qualified references (namespace/tool@version) for all tool calls; reject bare names and floating aliases to prevent ambiguous or hijacked resolution.",
+          toolsOpenSource: [
+            "semver (language-specific libs: python-semver, node-semver, etc.)",
+            "python-jsonschema (descriptor/schema validation)",
+            "Open Policy Agent (OPA) (optional policy gate)",
+            "OpenTelemetry (resolution decision tracing)",
+          ],
+          toolsCommercial: [
+            "Kong Gateway / Kong Enterprise (enforce resolver policy at gateway)",
+            "Apigee (API gateway policy enforcement)",
+            "Datadog (logs/alerts)",
+            "Splunk (SIEM)",
+          ],
+          defendsAgainst: [
+            {
+              framework: "OWASP Agentic Top 10 2026",
+              items: ["ASI02: Tool Misuse and Exploitation", "ASI04: Agentic Supply Chain Vulnerabilities"],
+            },
+          ],
+          implementationStrategies: [
+            {
+              strategy:
+                "Fail-closed resolver entry point: only accept namespace/tool@x.y.z; never resolve bare names or floating tags.",
+              howTo: `<h5>Step-by-step</h5>
+<ol>
+  <li><b>Define an allowlist</b> of approved tool IDs (source-controlled).</li>
+  <li><b>Require FQID</b> format: <code>namespace/tool@x.y.z</code>.</li>
+  <li><b>Fail closed</b>: if not exact allowlisted, stop (no guessing).</li>
+  <li><b>Log</b> every resolution decision (requested vs resolved).</li>
+</ol>
+
+<h5>Example code (Python) — FQID validation + allowlist lookup</h5>
+<pre><code>import re
+from dataclasses import dataclass
+
+# NOTE (for junior engineers):
+# - Regex enforces a *basic* format only.
+# - Security comes from allowlist + fail-closed behavior, not from regex alone.
+FQID_RE = re.compile(
+    r"^(?P&lt;ns&gt;[a-z0-9][a-z0-9._-]{0,62})/"
+    r"(?P&lt;name&gt;[a-z0-9][a-z0-9._-]{0,62})@"
+    r"(?P&lt;ver&gt;(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)$"
+)
+
+class ResolutionError(Exception):
+    pass
+
+@dataclass(frozen=True)
+class ToolRecord:
+    tool_id: str
+    endpoint: str
+    descriptor_sha256: str
+
+def resolve_tool(tool_ref: str, allowlist: dict) -&gt; ToolRecord:
+    # Step 1: Validate format (fail closed if not fully qualified)
+    if not FQID_RE.match(tool_ref):
+        raise ResolutionError(
+            f"Tool reference must be fully qualified: namespace/tool@x.y.z. got={tool_ref!r}"
+        )
+
+    # Step 2: Allowlist lookup (fail closed if not present)
+    rec = allowlist.get(tool_ref)
+    if not rec:
+        raise ResolutionError(f"Tool not allowlisted: {tool_ref!r}")
+
+    # Step 3: Log decision (helps audit and incident response)
+    print(f"[resolver] requested={tool_ref} resolved_endpoint={rec.endpoint}")
+    return rec</code></pre>
+
+<p><b>Common pitfall:</b> Avoid auto-complete or fallback to <code>latest</code>. That creates a typosquat/alias collision attack surface.</p>`,
+            },
+          ],
+        },
+
+        {
+          id: "AID-H-025.002",
+          name: "MCP Tool Descriptor Hash Binding & Drift Detection",
+          pillar: ["infra"],
+          phase: ["operation"],
+          description:
+            "Pin MCP/tool descriptors by content hash and fail closed on drift at resolution time. Scoped to MCP/tool descriptors only (non-goal: agent capability manifests).",
+          toolsOpenSource: [
+            "Sigstore cosign (optional signing/verification)",
+            "jq (safe diff/debug for JSON)",
+            "python-jsonschema (descriptor/schema validation)",
+            "OpenTelemetry (integrity check tracing)",
+          ],
+          toolsCommercial: [
+            "Splunk (SIEM alerts on drift)",
+            "Datadog (alerting / monitors)",
+            "Sumo Logic (log analytics)",
+          ],
+          defendsAgainst: [
+            { framework: "OWASP LLM Top 10 2025", items: ["LLM03:2025 Supply Chain"] },
+            { framework: "OWASP Agentic Top 10 2026", items: ["ASI04: Agentic Supply Chain Vulnerabilities"] },
+          ],
+          implementationStrategies: [
+            {
+              strategy:
+                "Canonicalize descriptor JSON → SHA-256 hash → compare with pinned value; block on mismatch and alert.",
+              howTo: `<h5>Step-by-step</h5>
+<ol>
+  <li><b>Pin</b> a descriptor hash for each <code>tool_fqid@version</code> (CI/ops controlled).</li>
+  <li><b>Re-hash</b> the descriptor on every resolution.</li>
+  <li><b>Mismatch</b> =&gt; fail closed + alert.</li>
+</ol>
+
+<h5>Example code (Python) — canonical JSON hashing</h5>
+<pre><code>import hashlib
+import json
+
+class DescriptorIntegrityError(Exception):
+    pass
+
+def canonical_json_bytes(obj: dict) -&gt; bytes:
+    # NOTE (for junior engineers):
+    # Canonicalization prevents hash drift caused by key order or whitespace differences.
+    return json.dumps(
+        obj,
+        sort_keys=True,            # stable key order
+        separators=(",", ":"),     # remove whitespace
+        ensure_ascii=False
+    ).encode("utf-8")
+
+def sha256_hex(b: bytes) -&gt; str:
+    return hashlib.sha256(b).hexdigest()
+
+def verify_descriptor_hash(tool_id: str, descriptor: dict, expected_hash: str) -&gt; None:
+    actual = sha256_hex(canonical_json_bytes(descriptor))
+    if actual != expected_hash:
+        # Fail closed: do not run a tool with a drifted descriptor.
+        raise DescriptorIntegrityError(
+            f"Descriptor hash mismatch for {tool_id}. expected={expected_hash} actual={actual}"
+        )</code></pre>
+
+<p><b>Scope note:</b> This sub-tech is for MCP/tool descriptors only. Do not duplicate agent capability manifest pinning/attestation here.</p>`,
+            },
+          ],
+        },
+
+        {
+          id: "AID-H-025.003",
+          name: "Fail-Closed Ambiguous Resolution with Typosquat Detection",
+          pillar: ["app"],
+          phase: ["operation"],
+          description:
+            "Detect ambiguous matches and near-miss tool names and fail closed. Similarity checks must trigger explicit disambiguation rather than auto-selection.",
+          toolsOpenSource: [
+            "RapidFuzz (string similarity)",
+            "jellyfish (string distance alternatives)",
+            "OpenTelemetry (trace ambiguous resolution events)",
+          ],
+          toolsCommercial: [
+            "Splunk (SIEM)",
+            "Datadog (alerting)",
+            "CrowdStrike (optional correlation with endpoint events)",
+          ],
+          defendsAgainst: [
+            { framework: "OWASP Agentic Top 10 2026", items: ["ASI04: Agentic Supply Chain Vulnerabilities"] },
+          ],
+          implementationStrategies: [
+            {
+              strategy:
+                "If multiple candidates exist, stop and require explicit selection; block near-miss names based on similarity threshold.",
+              howTo: `<h5>Step-by-step</h5>
+<ol>
+  <li><b>Ambiguity rule</b>: if registry returns more than one candidate, do not auto-pick.</li>
+  <li><b>Typosquat guard</b>: compare requested name to allowlisted tool IDs; block if too similar but not exact.</li>
+  <li><b>Operate safely</b>: return a disambiguation error that lists only safe identifiers.</li>
+</ol>
+
+<p><b>Tip:</b> Start with <i>log-only</i> to tune the similarity threshold, then switch to <i>block</i> for high-confidence cases.</p>`,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "AID-H-026",
+      name: "Unsafe Code Execution Prevention",
+      description:
+        "Prevent unexpected code execution (RCE) through unsafe evaluation paths by banning dangerous constructs, enforcing safe interpreters, and requiring a pre-execution static scan gate for agent-generated code. This is a cheap, fail-fast preventive layer that complements sandbox containment and dynamic behavioral analysis.",
+      pillar: ["app"],
+      phase: ["building", "operation"],
+      defendsAgainst: [
+        {
+          framework: "MITRE ATLAS",
+          items: [
+            "AML.T0050: Command and Scripting Interpreter",
+            "AML.T0011.001: User Execution: Malicious Package",
+          ],
+        },
+        {
+          framework: "MAESTRO",
+          items: ["Runtime Code Injection (L4)", "Agent Tool Misuse (L7)"],
+        },
+        {
+          framework: "OWASP LLM Top 10 2025",
+          items: ["LLM05:2025 Improper Output Handling", "LLM06:2025 Excessive Agency"],
+        },
+        {
+          framework: "OWASP Agentic Top 10 2026",
+          items: ["ASI05: Unexpected Code Execution (RCE)"],
+        },
+      ],
+      subTechniques: [
+        {
+          id: "AID-H-026.001",
+          name: "Dangerous Construct Detection & Blocking",
+          pillar: ["app"],
+          phase: ["building", "operation"],
+          description:
+            "Detect and block known-dangerous constructs (eval/exec/unsafe deserialization/shell injection patterns) in agent-generated code or execution requests before they reach any interpreter or tool runner.",
+          toolsOpenSource: [
+            "Semgrep",
+            "Bandit (Python)",
+            "CodeQL (community)",
+            "ESLint + eslint-plugin-security (JS/TS)",
+            "tree-sitter (multi-language parsing)",
+          ],
+          toolsCommercial: [
+            "GitHub Advanced Security (CodeQL)",
+            "Snyk Code",
+            "Veracode",
+            "Checkmarx",
+            "SonarQube (Commercial editions)",
+          ],
+          defendsAgainst: [
+            { framework: "OWASP Agentic Top 10 2026", items: ["ASI05: Unexpected Code Execution (RCE)"] },
+          ],
+          implementationStrategies: [
+            {
+              strategy:
+                "Use AST-based scanning (not regex-only) to block forbidden imports/calls; support block/warn/log policy modes.",
+              howTo: `<h5>Step-by-step</h5>
+<ol>
+  <li><b>Define a denylist</b> (e.g., eval/exec, unsafe deserialization, shell execution).</li>
+  <li><b>Parse code using AST</b> to reliably detect imports and function calls.</li>
+  <li><b>Enforce policy</b>: block critical patterns; optionally warn/log for lower severity.</li>
+</ol>
+
+<h5>Example code (Python) — AST scanner</h5>
+<pre><code>import ast
+
+FORBIDDEN_FUNCS = {"eval", "exec", "compile", "__import__"}
+FORBIDDEN_MODULES = {"os", "subprocess", "pickle", "yaml"}
+
+class Finding:
+    def __init__(self, rule_id, message, lineno=0):
+        self.rule_id = rule_id
+        self.message = message
+        self.lineno = lineno
+
+def scan_python(code: str):
+    findings = []
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        # NOTE: Syntax errors should be treated as "not executable / not allowed"
+        findings.append(Finding("AID-H-026.syntax", f"SyntaxError: {e}", getattr(e, "lineno", 0)))
+        return findings
+
+    for node in ast.walk(tree):
+        # Block dangerous imports
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            for name in names:
+                top = name.split(".", 1)[0]
+                if top in FORBIDDEN_MODULES:
+                    findings.append(Finding("AID-H-026.import", f"Forbidden import: {name}", getattr(node, "lineno", 0)))
+
+        # Block dangerous function calls (eval/exec/etc.)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in FORBIDDEN_FUNCS:
+                findings.append(Finding("AID-H-026.call", f"Forbidden call: {node.func.id}()", getattr(node, "lineno", 0)))
+
+    return findings</code></pre>
+
+<p><b>Tip:</b> Run in log-only mode first to measure false positives, then enforce blocking for production execution paths.</p>`,
+            },
+          ],
+        },
+
+        {
+          id: "AID-H-026.002",
+          name: "Safe Interpreter Enforcement",
+          pillar: ["app"],
+          phase: ["building", "operation"],
+          description:
+            "When dynamic evaluation is required, force safe/restricted interpreters inside the execution boundary so code cannot access filesystem, network, or privileged APIs by design. For interactive “vibe coding”, run evaluation only inside ephemeral sandboxes.",
+          toolsOpenSource: [
+            "RestrictedPython (Python)",
+            "vm2 / isolated-vm (JavaScript sandbox runtimes)",
+            "Docker / Podman (ephemeral sandboxes)",
+            "gVisor / Firecracker (optional hardened sandbox layers)",
+            "wasmtime / wasmer (WASM runtimes)",
+          ],
+          toolsCommercial: [
+            "AWS Lambda (ephemeral execution model)",
+            "Google Cloud Run (sandboxed containers)",
+            "Azure Container Apps (sandboxed containers)",
+          ],
+          defendsAgainst: [
+            { framework: "OWASP Agentic Top 10 2026", items: ["ASI05: Unexpected Code Execution (RCE)"] },
+          ],
+          implementationStrategies: [
+            {
+              strategy:
+                "Allowlist restricted interpreters and enforce interpreter selection via an execution gateway (policy), not via model output.",
+              howTo: `<h5>What to enforce</h5>
+<ul>
+  <li><b>Restricted interpreters only</b>: allowlist approved evaluators (literal-only, restricted subsets).</li>
+  <li><b>Ephemeral sandboxes</b>: for vibe coding, run code in short-lived containers/WASM runtimes and delete the environment after execution.</li>
+  <li><b>Deny-by-default</b>: no outbound network, non-root, confined working directory.</li>
+</ul>
+
+<h5>Example code (Python) — restricted interpreter (conceptual)</h5>
+<pre><code>from RestrictedPython import compile_restricted
+from RestrictedPython import safe_globals
+
+# NOTE:
+# - This example demonstrates a restricted interpreter approach.
+# - You should still run it inside an ephemeral sandbox for defense-in-depth.
+
+def run_restricted(code_str: str):
+    byte_code = compile_restricted(code_str, "&lt;agent-code&gt;", "exec")
+    exec(byte_code, safe_globals, {})</code></pre>`,
+            },
+          ],
+        },
+
+        {
+          id: "AID-H-026.003",
+          name: "Pre-Execution Static Scan",
+          pillar: ["app"],
+          phase: ["building", "operation"],
+          description:
+            "Require a mandatory static analysis gate (SAST/rules) before any agent-generated code or executable artifact is run. Fail-fast on high severity findings and persist scan evidence for audit.",
+          toolsOpenSource: [
+            "Semgrep",
+            "Bandit (Python)",
+            "ESLint + eslint-plugin-security (JS/TS)",
+            "CodeQL (community)",
+          ],
+          toolsCommercial: [
+            "GitHub Advanced Security (CodeQL)",
+            "Snyk Code",
+            "Veracode",
+            "Checkmarx",
+          ],
+          defendsAgainst: [
+            { framework: "OWASP LLM Top 10 2025", items: ["LLM05:2025 Improper Output Handling"] },
+            { framework: "OWASP Agentic Top 10 2026", items: ["ASI05: Unexpected Code Execution (RCE)"] },
+          ],
+          implementationStrategies: [
+            {
+              strategy:
+                "Run SAST in CI and (for interactive sessions) right before execution; block on critical findings.",
+              howTo: `<h5>Step-by-step</h5>
+<ol>
+  <li><b>CI gate</b>: scan code changes; block merges on critical findings.</li>
+  <li><b>Runtime gate</b>: for vibe coding (no PR), scan immediately before execution.</li>
+  <li><b>Store evidence</b>: keep scan results (timestamp + ruleset version + artifact hash).</li>
+</ol>
+
+<h5>Example code (Python) — run Semgrep CLI (simplified)</h5>
+<pre><code>import subprocess
+
+def run_semgrep(path: str) -&gt; None:
+    # NOTE:
+    # - Semgrep exit code may indicate findings or execution failure.
+    # - In a real deployment, differentiate "scan failed" vs "findings detected".
+    cmd = ["semgrep", "--config", "p/security-audit", "--json", path]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Semgrep gate failed. stderr={result.stderr[:500]}")</code></pre>`,
+            },
+          ],
         },
       ],
     },
